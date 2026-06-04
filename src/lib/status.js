@@ -21,7 +21,7 @@ function buildReason(status, summary) {
     ? weak.join(", ")
     : `uy vazifasi ${summary.avgHw}%, sinf vazifasi ${summary.avgAtt}%, faollik ${summary.avgAct}%`;
 
-  return `Haftalik natija ${summary.score} ball (${summary.lessons} dars) — past: ${detail}.`;
+  return `Oxirgi ${summary.lessons} dars natijasi ${summary.score} ball — past: ${detail}.`;
 }
 
 // Check'ga yuboriladigan body'ni tayyorlaydi.

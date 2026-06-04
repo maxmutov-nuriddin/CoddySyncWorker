@@ -61,10 +61,32 @@ function weeklySummary(studentId, records, settings, range) {
   return { avgHw, avgAtt, avgAct, score, lessons: n };
 }
 
+// O'quvchining OXIRGI N ta baholangan darsi bo'yicha o'rtacha va finalScore.
+// Sana bo'yicha eng yangi N ta dars olinadi (hafta emas — dars soni bo'yicha).
+function lastLessonsSummary(studentId, records, settings, n) {
+  const recs = records
+    .filter((r) => r.studentId === studentId)
+    .filter((r) => Number(r.homework) > 0 || Number(r.attendance) > 0 || Number(r.activity) > 0)
+    .sort((a, b) => (String(a.date) > String(b.date) ? -1 : 1)) // yangi -> eski
+    .slice(0, n);
+  if (!recs.length) return null;
+
+  const c = recs.length;
+  const avgHw = Math.round(recs.reduce((s, r) => s + Number(r.homework || 0), 0) / c);
+  const avgAtt = Math.round(recs.reduce((s, r) => s + Number(r.attendance || 0), 0) / c);
+  const avgAct = Math.round(recs.reduce((s, r) => s + Number(r.activity || 0), 0) / c);
+  const score = finalScore(
+    { homeworkScore: avgHw, attendanceScore: avgAtt, activityScore: avgAct },
+    settings
+  );
+  return { avgHw, avgAtt, avgAct, score, lessons: c };
+}
+
 module.exports = {
   finalScore,
   getRecordsInRange,
   getPreviousWeekRange,
   getCurrentWeekRange,
-  weeklySummary
+  weeklySummary,
+  lastLessonsSummary
 };

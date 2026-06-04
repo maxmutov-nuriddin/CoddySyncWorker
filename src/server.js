@@ -14,18 +14,18 @@ const PORT = Number(process.env.PORT) || 10000;
 let running = false;
 let lastRun = null;
 
-async function runJob(name, uid) {
+async function runJob(name, uid, opts = {}) {
   if (running) return { skipped: "allaqachon ishlayapti" };
   running = true;
   const startedAt = new Date().toISOString();
   const t0 = Date.now();
   try {
-    console.log(`[job] ${name} boshlandi${uid ? ` (uid=${uid})` : ""}`);
+    console.log(`[job] ${name} boshlandi${uid ? ` (uid=${uid})` : opts.autoOnly ? " (avto)" : ""}`);
     if (name === "pull") await pullFromCheck();
-    else if (name === "push") await pushToCheck(uid);
+    else if (name === "push") await pushToCheck(uid, opts);
     else {
       await pullFromCheck();
-      await pushToCheck(uid);
+      await pushToCheck(uid, opts);
     }
     const seconds = ((Date.now() - t0) / 1000).toFixed(1);
     lastRun = { name, startedAt, seconds, ok: true };
@@ -101,6 +101,7 @@ server.listen(PORT, () => {
 // Ichki cron — service UYG'OQ bo'lganda ishlaydi.
 // Bepul Render uxlab qolsa ishlamaydi -> tashqi ping (/run/...) ishlating.
 cron.schedule(config.pullCron, () => runJob("pull"), { timezone: config.tz });
-cron.schedule(config.pushCron, () => runJob("push"), { timezone: config.tz });
+// Avto push — faqat "avtomatik yuborish" yoqilgan mentorlar
+cron.schedule(config.pushCron, () => runJob("push", undefined, { autoOnly: true }), { timezone: config.tz });
 
 console.log(`[cron] pull: "${config.pullCron}", push: "${config.pushCron}", TZ: ${config.tz}`);

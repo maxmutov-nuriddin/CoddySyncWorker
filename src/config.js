@@ -24,7 +24,8 @@ const config = {
   goodMin: Number(process.env.GOOD_MIN || 75),
   averageMin: Number(process.env.AVERAGE_MIN || 50),
 
-  weekWindow: (process.env.WEEK_WINDOW || "previous").trim(), // previous | current
+  weekWindow: (process.env.WEEK_WINDOW || "previous").trim(), // previous | current (eskirgan)
+  lessonBatch: Math.max(1, Number(process.env.LESSON_BATCH || 6)), // status oxirgi shuncha dars bo'yicha
 
   pullCron: process.env.PULL_CRON || "0 3 * * *",
   pushCron: process.env.PUSH_CRON || "0 4 * * 1",
