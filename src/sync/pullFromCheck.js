@@ -14,6 +14,29 @@ function normName(s) {
   return String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+// Check "days" -> Result weekdays (dayjs: 0=Yak ... 6=Shanba)
+// Toq = Dushanba, Chorshanba, Juma ; Juft = Seshanba, Payshanba, Shanba
+function daysToWeekdays(days) {
+  if (days === "Toq") return [1, 3, 5];
+  if (days === "Juft") return [2, 4, 6];
+  return [];
+}
+
+function addHours(hhmm, h) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || "").trim());
+  if (!m) return "";
+  const hour = (Number(m[1]) + h) % 24;
+  return `${String(hour).padStart(2, "0")}:${m[2]}`;
+}
+
+// Check guruhidan Result jadvalini (kun + vaqt) tuzadi. End vaqti Check'da yo'q -> start + 2 soat.
+function scheduleFromCheck(g) {
+  const weekdays = daysToWeekdays(g.days);
+  const lessonStart = /^\d{1,2}:\d{2}$/.test(String(g.time || "").trim()) ? g.time.trim() : "";
+  const lessonEnd = lessonStart ? addHours(lessonStart, 2) : "";
+  return { weekdays, lessonStart, lessonEnd };
+}
+
 // ── 1. Firebase Auth: mentor accountini ta'minlash + parol parity ──────────
 // Check'dagi bcrypt hash bilan importUsers -> Result paroli = Check paroli.
 async function ensureMentorAuth(mentor, email) {
@@ -82,14 +105,17 @@ async function upsertGroups(uid, checkGroups) {
 
   for (const g of checkGroups) {
     nameByCheckId[g._id] = g.name;
+    // Dars kuni + vaqti Check'dan AVTO belgilanadi
+    const schedule = scheduleFromCheck(g);
 
     const byCheckId = await col.where("checkGroupId", "==", g._id).limit(1).get();
     if (!byCheckId.empty) {
       const docRef = byCheckId.docs[0].ref;
       const cur = byCheckId.docs[0].data();
+      // Nom + jadval (kun/vaqt) Check'dan yangilanadi
+      await docRef.set({ name: g.name, ...schedule }, { merge: true });
       if (cur.name !== g.name) {
-        // Check'da rename bo'lgan -> guruh nomini va o'quvchilarning group maydonini yangilaymiz
-        await docRef.set({ name: g.name }, { merge: true });
+        // Check'da rename bo'lgan -> o'quvchilarning group maydonini ham yangilaymiz
         const studs = await db().collection(`users/${uid}/students`).where("group", "==", cur.name).get();
         if (!studs.empty) {
           const batch = db().batch();
@@ -103,16 +129,16 @@ async function upsertGroups(uid, checkGroups) {
     // Result'da qo'lda yaratilgan, shu nomli guruh bo'lsa — uni bog'laymiz (dublikat yaratmaymiz)
     const byName = await col.where("name", "==", g.name).limit(1).get();
     if (!byName.empty) {
-      await byName.docs[0].ref.set({ checkGroupId: g._id, syncSource: "coddycheck" }, { merge: true });
+      await byName.docs[0].ref.set({ checkGroupId: g._id, syncSource: "coddycheck", ...schedule }, { merge: true });
       continue;
     }
 
-    // Yangi guruh — Result jadval sozlamalari bo'sh (mentor keyin to'ldiradi)
+    // Yangi guruh — kun/vaqt Check'dan avto qo'yiladi
     await col.add({
       name: g.name,
-      weekdays: [],
-      lessonStart: "",
-      lessonEnd: "",
+      weekdays: schedule.weekdays,
+      lessonStart: schedule.lessonStart,
+      lessonEnd: schedule.lessonEnd,
       telegramChatId: g.chatId || "",
       studentsCount: 0,
       checkGroupId: g._id,
@@ -122,6 +148,26 @@ async function upsertGroups(uid, checkGroups) {
   }
 
   return nameByCheckId;
+}
+
+// ── Bo'sh sync guruhlarni o'chirish (odam qolmagan guruh Result'da ko'rinmaydi) ─
+async function removeEmptyGroups(uid) {
+  const [groupsSnap, studentsSnap] = await Promise.all([
+    db().collection(`users/${uid}/groups`).get(),
+    db().collection(`users/${uid}/students`).get()
+  ]);
+  const groupsWithStudents = new Set(studentsSnap.docs.map((d) => d.data().group).filter(Boolean));
+
+  let removed = 0;
+  for (const g of groupsSnap.docs) {
+    const data = g.data();
+    // Faqat Check'dan kelgan guruh, va unda hech kim qolmagan bo'lsa -> o'chiramiz
+    if (data.syncSource === "coddycheck" && data.checkGroupId && !groupsWithStudents.has(data.name)) {
+      await g.ref.delete();
+      removed++;
+    }
+  }
+  return removed;
 }
 
 // ── 4. O'quvchilar: faqat IDENTITY yangilanadi, hisob-kitoblarga TEGILMAYDI ──
@@ -245,7 +291,10 @@ async function syncMentor(mentor) {
   const checkStudents = await check.getMentorStudents(mentor._id);
   const stats = await upsertStudents(uid, checkStudents, nameByCheckId);
 
-  return { mentor: mentor.fullName, uid, groups: checkGroups.length, students: checkStudents.length, ...stats };
+  // Odam qolmagan (hammasi muzlatilgan/lead) guruhlarni o'chiramiz
+  const removedGroups = await removeEmptyGroups(uid);
+
+  return { mentor: mentor.fullName, uid, groups: checkGroups.length, students: checkStudents.length, removedGroups, ...stats };
 }
 
 async function pullFromCheck() {
@@ -257,7 +306,7 @@ async function pullFromCheck() {
     try {
       const r = await syncMentor(mentor);
       results.push(r);
-      console.log(`[pull] ✓ ${r.mentor}:`, r.skipped ? r.skipped : `guruh=${r.groups}, o'quvchi=${r.students} (yangi:${r.created}, bog'landi:${r.linked}, o'chirildi:${r.removed})`);
+      console.log(`[pull] ✓ ${r.mentor}:`, r.skipped ? r.skipped : `guruh=${r.groups}, o'quvchi=${r.students} (yangi:${r.created}, bog'landi:${r.linked}, o'chirildi:${r.removed}, bo'sh guruh:${r.removedGroups})`);
     } catch (err) {
       console.error(`[pull] ✗ ${mentor.fullName}:`, err.message);
       results.push({ mentor: mentor.fullName, error: err.message });
