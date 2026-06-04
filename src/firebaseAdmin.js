@@ -3,33 +3,60 @@ const path = require("path");
 const admin = require("firebase-admin");
 const { config } = require("./config");
 
-function parseJsonOrThrow(raw, source) {
-  try {
-    return JSON.parse(raw);
-  } catch (err) {
-    throw new Error(
-      `[firebase] ${source} ichidagi JSON noto'g'ri (${err.message}). ` +
-        `Render'da FIREBASE_SERVICE_ACCOUNT_BASE64 ishlatish tavsiya etiladi.`
-    );
-  }
+// Yaroqli service account ekanini tekshiradi (shunchaki JSON emas)
+function isValidSA(sa) {
+  return sa && typeof sa === "object" && sa.client_email && sa.private_key;
 }
 
+// Har bir manbani SINAB ko'radi; biri buzilgan bo'lsa o'tkazib yuborib,
+// keyingisiga o'tadi. Hammasi muvaffaqiyatsiz bo'lsagina xato beradi.
+// Shu sabab Render'dagi eski/buzilgan o'zgaruvchilar Secret File'ga xalaqit bermaydi.
 function loadServiceAccount() {
-  // 1-variant (eng ishonchli): base64 — qo'shtirnoq/\n muammosi bo'lmaydi
+  const sources = [];
+
   if (config.firebaseServiceAccountBase64) {
-    const decoded = Buffer.from(config.firebaseServiceAccountBase64, "base64").toString("utf8");
-    return parseJsonOrThrow(decoded, "FIREBASE_SERVICE_ACCOUNT_BASE64");
+    sources.push([
+      "FIREBASE_SERVICE_ACCOUNT_BASE64",
+      () => JSON.parse(Buffer.from(config.firebaseServiceAccountBase64, "base64").toString("utf8"))
+    ]);
   }
   if (config.firebaseServiceAccountJson) {
-    return parseJsonOrThrow(config.firebaseServiceAccountJson, "FIREBASE_SERVICE_ACCOUNT");
+    sources.push(["FIREBASE_SERVICE_ACCOUNT", () => JSON.parse(config.firebaseServiceAccountJson)]);
   }
   if (config.firebaseServiceAccountPath) {
-    const abs = path.isAbsolute(config.firebaseServiceAccountPath)
-      ? config.firebaseServiceAccountPath
-      : path.join(process.cwd(), config.firebaseServiceAccountPath);
-    return JSON.parse(fs.readFileSync(abs, "utf8"));
+    sources.push([
+      "FIREBASE_SERVICE_ACCOUNT_PATH",
+      () => {
+        const abs = path.isAbsolute(config.firebaseServiceAccountPath)
+          ? config.firebaseServiceAccountPath
+          : path.join(process.cwd(), config.firebaseServiceAccountPath);
+        return JSON.parse(fs.readFileSync(abs, "utf8"));
+      }
+    ]);
   }
-  throw new Error("[firebase] Service account topilmadi.");
+
+  const failures = [];
+  for (const [name, load] of sources) {
+    try {
+      const sa = load();
+      if (!isValidSA(sa)) {
+        failures.push(`${name}: client_email/private_key yo'q`);
+        continue;
+      }
+      if (failures.length) {
+        console.warn(`[firebase] ${name} ishlatildi (oldingilari yaroqsiz: ${failures.join("; ")})`);
+      }
+      return sa;
+    } catch (err) {
+      failures.push(`${name}: ${err.message}`);
+    }
+  }
+
+  throw new Error(
+    failures.length
+      ? `[firebase] Hech qaysi service account manbasi yaroqli emas -> ${failures.join(" | ")}`
+      : "[firebase] Service account topilmadi (BASE64 / JSON / PATH dan birini o'rnating)."
+  );
 }
 
 let _app = null;
