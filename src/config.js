@@ -11,6 +11,9 @@ function required(name) {
 const config = {
   checkApiUrl: (process.env.CHECK_API_URL || "").trim().replace(/\/+$/, ""),
   syncApiKey: (process.env.SYNC_API_KEY || "").trim(),
+  // Frontend (Result settings) /run/* ni chaqirishi uchun kam huquqli token.
+  // SYNC_API_KEY'dan FARQLI bo'lishi shart — bu faqat sync'ni ishga tushiradi, Check API'ga kira olmaydi.
+  workerRunToken: (process.env.WORKER_RUN_TOKEN || "").trim(),
 
   firebaseServiceAccountPath: (process.env.FIREBASE_SERVICE_ACCOUNT_PATH || "").trim(),
   firebaseServiceAccountJson: (process.env.FIREBASE_SERVICE_ACCOUNT || "").trim(),

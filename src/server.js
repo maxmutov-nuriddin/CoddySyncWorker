@@ -39,7 +39,13 @@ async function runJob(name) {
 }
 
 function send(res, code, obj) {
-  res.writeHead(code, { "Content-Type": "application/json; charset=utf-8" });
+  res.writeHead(code, {
+    "Content-Type": "application/json; charset=utf-8",
+    // Result frontend (boshqa origin) /run/* ni chaqira olishi uchun
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type, X-Sync-Key",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS"
+  });
   res.end(JSON.stringify(obj));
 }
 
@@ -52,16 +58,23 @@ const server = http.createServer((req, res) => {
   }
   const path = parsed.pathname;
 
+  // CORS preflight (frontend fetch uchun)
+  if (req.method === "OPTIONS") {
+    return send(res, 204, {});
+  }
+
   // Render health check + keep-alive
   if (path === "/" || path === "/health") {
     return send(res, 200, { ok: true, service: "coddy-sync-worker", running, lastRun });
   }
 
-  // Tashqi scheduler (cron-job.org / UptimeRobot) shu yerga uradi:
+  // Tashqi scheduler (cron-job.org) yoki Result sozlamalaridagi tugma shu yerga uradi:
   //   /run/pull?key=...  /run/push?key=...  /run/sync?key=...
   if (path.startsWith("/run/")) {
     const key = parsed.searchParams.get("key") || req.headers["x-sync-key"];
-    if (key !== config.syncApiKey) {
+    // SYNC_API_KEY (to'liq) yoki WORKER_RUN_TOKEN (faqat /run/* — frontend uchun xavfsiz)
+    const allowed = key === config.syncApiKey || (config.workerRunToken && key === config.workerRunToken);
+    if (!allowed) {
       return send(res, 401, { ok: false, error: "noto'g'ri key" });
     }
     const job = path.split("/")[2];
