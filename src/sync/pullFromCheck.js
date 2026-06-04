@@ -22,18 +22,21 @@ function daysToWeekdays(days) {
   return [];
 }
 
-function addHours(hhmm, h) {
+// Bitta dars davomiyligi (daqiqa) — Check'da end vaqti yo'q, shuning uchun start + shu
+const LESSON_DURATION_MIN = 90; // 1 soat 30 daqiqa
+
+function addMinutes(hhmm, mins) {
   const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || "").trim());
   if (!m) return "";
-  const hour = (Number(m[1]) + h) % 24;
-  return `${String(hour).padStart(2, "0")}:${m[2]}`;
+  const total = (Number(m[1]) * 60 + Number(m[2]) + mins) % (24 * 60);
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
-// Check guruhidan Result jadvalini (kun + vaqt) tuzadi. End vaqti Check'da yo'q -> start + 2 soat.
+// Check guruhidan Result jadvalini (kun + vaqt) tuzadi. End = start + LESSON_DURATION_MIN.
 function scheduleFromCheck(g) {
   const weekdays = daysToWeekdays(g.days);
   const lessonStart = /^\d{1,2}:\d{2}$/.test(String(g.time || "").trim()) ? g.time.trim() : "";
-  const lessonEnd = lessonStart ? addHours(lessonStart, 2) : "";
+  const lessonEnd = lessonStart ? addMinutes(lessonStart, LESSON_DURATION_MIN) : "";
   return { weekdays, lessonStart, lessonEnd };
 }
 
