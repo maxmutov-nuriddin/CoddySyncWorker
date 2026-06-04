@@ -14,6 +14,7 @@ const config = {
 
   firebaseServiceAccountPath: (process.env.FIREBASE_SERVICE_ACCOUNT_PATH || "").trim(),
   firebaseServiceAccountJson: (process.env.FIREBASE_SERVICE_ACCOUNT || "").trim(),
+  firebaseServiceAccountBase64: (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64 || "").trim(),
 
   resultEmailDomain: (process.env.RESULT_EMAIL_DOMAIN || "oquv-natija.local").trim(),
 
@@ -32,9 +33,13 @@ const config = {
 function assertReady() {
   required("CHECK_API_URL");
   required("SYNC_API_KEY");
-  if (!config.firebaseServiceAccountPath && !config.firebaseServiceAccountJson) {
+  if (
+    !config.firebaseServiceAccountPath &&
+    !config.firebaseServiceAccountJson &&
+    !config.firebaseServiceAccountBase64
+  ) {
     throw new Error(
-      "[config] Firebase service account topilmadi. FIREBASE_SERVICE_ACCOUNT_PATH yoki FIREBASE_SERVICE_ACCOUNT ni o'rnating."
+      "[config] Firebase service account topilmadi. FIREBASE_SERVICE_ACCOUNT_BASE64 (tavsiya), FIREBASE_SERVICE_ACCOUNT yoki FIREBASE_SERVICE_ACCOUNT_PATH ni o'rnating."
     );
   }
 }

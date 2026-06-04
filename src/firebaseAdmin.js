@@ -3,9 +3,25 @@ const path = require("path");
 const admin = require("firebase-admin");
 const { config } = require("./config");
 
+function parseJsonOrThrow(raw, source) {
+  try {
+    return JSON.parse(raw);
+  } catch (err) {
+    throw new Error(
+      `[firebase] ${source} ichidagi JSON noto'g'ri (${err.message}). ` +
+        `Render'da FIREBASE_SERVICE_ACCOUNT_BASE64 ishlatish tavsiya etiladi.`
+    );
+  }
+}
+
 function loadServiceAccount() {
+  // 1-variant (eng ishonchli): base64 — qo'shtirnoq/\n muammosi bo'lmaydi
+  if (config.firebaseServiceAccountBase64) {
+    const decoded = Buffer.from(config.firebaseServiceAccountBase64, "base64").toString("utf8");
+    return parseJsonOrThrow(decoded, "FIREBASE_SERVICE_ACCOUNT_BASE64");
+  }
   if (config.firebaseServiceAccountJson) {
-    return JSON.parse(config.firebaseServiceAccountJson);
+    return parseJsonOrThrow(config.firebaseServiceAccountJson, "FIREBASE_SERVICE_ACCOUNT");
   }
   if (config.firebaseServiceAccountPath) {
     const abs = path.isAbsolute(config.firebaseServiceAccountPath)
