@@ -205,21 +205,28 @@ async function upsertStudents(uid, checkStudents, nameByCheckId) {
     if (ops >= 400) await flush();
   }
 
-  // Check'dan tushib qolgan (o'chirilgan/inactive) sync o'quvchilarini SOFT archive:
-  // scoring tarixini O'CHIRMAYMIZ, faqat checkActive=false belgilaymiz.
-  await flush(); // arxiv ops uchun toza batch
-  let archived = 0;
-  snap.forEach((d) => {
+  // Check'dan endi kelmaydigan (o'chirilgan / muzlatilgan / lead) sync o'quvchilarni
+  // Result'dan butunlay O'CHIRAMIZ — ko'rinmasligi uchun, recordlari bilan birga.
+  // Faqat Check'dan kelgan (syncSource=coddycheck) o'quvchilar; qo'lda qo'shilganlarga tegmaymiz.
+  await flush();
+  const toRemove = snap.docs.filter((d) => {
     const data = d.data();
-    if (data.syncSource === "coddycheck" && data.checkStudentId && !seen.has(d.id) && data.checkActive !== false) {
-      batch.set(d.ref, { checkActive: false, syncedAt: FieldValue.serverTimestamp() }, { merge: true });
-      ops++;
-      archived++;
-    }
+    return data.syncSource === "coddycheck" && data.checkStudentId && !seen.has(d.id);
   });
 
-  await flush();
-  return { created, linked, updated, archived };
+  let removed = 0;
+  for (const d of toRemove) {
+    const recs = await db().collection(`users/${uid}/records`).where("studentId", "==", d.id).get();
+    const refs = [...recs.docs.map((r) => r.ref), d.ref];
+    for (let i = 0; i < refs.length; i += 400) {
+      const delBatch = db().batch();
+      refs.slice(i, i + 400).forEach((ref) => delBatch.delete(ref));
+      await delBatch.commit();
+    }
+    removed++;
+  }
+
+  return { created, linked, updated, removed };
 }
 
 async function syncMentor(mentor) {
@@ -250,7 +257,7 @@ async function pullFromCheck() {
     try {
       const r = await syncMentor(mentor);
       results.push(r);
-      console.log(`[pull] ✓ ${r.mentor}:`, r.skipped ? r.skipped : `guruh=${r.groups}, o'quvchi=${r.students} (yangi:${r.created}, bog'landi:${r.linked}, arxiv:${r.archived})`);
+      console.log(`[pull] ✓ ${r.mentor}:`, r.skipped ? r.skipped : `guruh=${r.groups}, o'quvchi=${r.students} (yangi:${r.created}, bog'landi:${r.linked}, o'chirildi:${r.removed})`);
     } catch (err) {
       console.error(`[pull] ✗ ${mentor.fullName}:`, err.message);
       results.push({ mentor: mentor.fullName, error: err.message });
