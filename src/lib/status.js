@@ -7,21 +7,27 @@ function mapStatus(score) {
   return "poor";
 }
 
-// average/poor uchun sabab izohi — BITTA GAP. good uchun izoh SHART EMAS (null).
-// Maydon nomlari Result UI bilan bir xil: uy vazifasi, sinf vazifasi, faollik.
+// Foiz o'rniga so'z: <40 -> "past", 40-59 -> "o'rtacha"
+function levelWord(v) {
+  return v < 40 ? "past" : "o'rtacha";
+}
+
+// average/poor uchun sabab izohi — BITTA GAP, foizsiz, tabiiy so'z bilan.
+// Ikki toifa: uy vazifa qilishi ; sinfda qatnashishi (= sinf vazifa + faollik).
 function buildReason(status, summary) {
   if (status === "good") return null;
 
   const weak = [];
-  if (summary.avgHw < 60) weak.push(`uy vazifasi ${summary.avgHw}%`);
-  if (summary.avgAtt < 60) weak.push(`sinf vazifasi ${summary.avgAtt}%`);
-  if (summary.avgAct < 60) weak.push(`faollik ${summary.avgAct}%`);
+  if (summary.avgHw < 60) weak.push(`uy vazifa qilishi ${levelWord(summary.avgHw)}`);
 
-  const detail = weak.length
-    ? weak.join(", ")
-    : `uy vazifasi ${summary.avgHw}%, sinf vazifasi ${summary.avgAtt}%, faollik ${summary.avgAct}%`;
+  // sinf vazifa + faollik = sinfda qatnashishi
+  const participation = Math.round((Number(summary.avgAtt) + Number(summary.avgAct)) / 2);
+  if (participation < 60) weak.push(`sinfda qatnashishi ${levelWord(participation)}`);
 
-  return `Oxirgi ${summary.lessons} dars natijasi ${summary.score} ball — past: ${detail}.`;
+  if (!weak.length) return "Umumiy ko'rsatkich o'rtacha.";
+
+  const detail = weak.join(", ");
+  return detail.charAt(0).toUpperCase() + detail.slice(1) + ".";
 }
 
 // Check'ga yuboriladigan body'ni tayyorlaydi.
