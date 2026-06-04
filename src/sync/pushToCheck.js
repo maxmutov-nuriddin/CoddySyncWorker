@@ -66,17 +66,20 @@ async function pushMentor(uid, mentorId, range) {
   return { sent, skippedNoData, skippedLocked, notFound, total: students.length };
 }
 
-async function pushToCheck() {
+// onlyUid berilsa — faqat shu bitta o'qituvchining natijasi yuboriladi (mentor o'zi bossa).
+// Bo'sh bo'lsa — hamma mentor (cron / admin).
+async function pushToCheck(onlyUid) {
   const range = weekRange();
   console.log(
-    `[push] hafta oynasi: ${range.start.format("YYYY-MM-DD")} .. ${range.end.format("YYYY-MM-DD")}${config.dryRun ? " (DRY RUN)" : ""}`
+    `[push] hafta oynasi: ${range.start.format("YYYY-MM-DD")} .. ${range.end.format("YYYY-MM-DD")}${config.dryRun ? " (DRY RUN)" : ""}${onlyUid ? ` (faqat uid=${onlyUid})` : ""}`
   );
 
   // Sync qilingan o'qituvchilar (checkMentorId bor) bo'yicha yuramiz
   const teachers = await db().collection("teachers").get();
-  const synced = teachers.docs
+  let synced = teachers.docs
     .map((d) => ({ uid: d.id, ...d.data() }))
     .filter((t) => t.checkMentorId);
+  if (onlyUid) synced = synced.filter((t) => t.uid === onlyUid);
 
   console.log(`[push] ${synced.length} ta sync qilingan mentor topildi`);
 

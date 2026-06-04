@@ -14,18 +14,18 @@ const PORT = Number(process.env.PORT) || 10000;
 let running = false;
 let lastRun = null;
 
-async function runJob(name) {
+async function runJob(name, uid) {
   if (running) return { skipped: "allaqachon ishlayapti" };
   running = true;
   const startedAt = new Date().toISOString();
   const t0 = Date.now();
   try {
-    console.log(`[job] ${name} boshlandi`);
+    console.log(`[job] ${name} boshlandi${uid ? ` (uid=${uid})` : ""}`);
     if (name === "pull") await pullFromCheck();
-    else if (name === "push") await pushToCheck();
+    else if (name === "push") await pushToCheck(uid);
     else {
       await pullFromCheck();
-      await pushToCheck();
+      await pushToCheck(uid);
     }
     const seconds = ((Date.now() - t0) / 1000).toFixed(1);
     lastRun = { name, startedAt, seconds, ok: true };
@@ -84,9 +84,11 @@ const server = http.createServer((req, res) => {
     if (running) {
       return send(res, 409, { ok: false, error: "allaqachon ishlayapti", running: true });
     }
+    // push uchun ixtiyoriy uid — faqat shu mentor natijasini yuboradi
+    const uid = parsed.searchParams.get("uid") || undefined;
     // Uzoq ishni kutmaymiz — darhol javob, ish fonda ketadi (HTTP timeout bo'lmasin)
-    runJob(job);
-    return send(res, 202, { ok: true, started: job });
+    runJob(job, uid);
+    return send(res, 202, { ok: true, started: job, uid: uid || null });
   }
 
   return send(res, 404, { ok: false, error: "not found" });
